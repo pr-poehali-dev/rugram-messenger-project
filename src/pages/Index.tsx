@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,48 +27,16 @@ interface Community {
   icon: string;
 }
 
-const mockChats: Chat[] = [
-  {
-    id: 1,
-    name: 'Анна Смирнова',
-    avatar: '👩‍💼',
-    lastMessage: 'Привет! Как дела?',
-    time: '14:23',
-    unread: 3,
-    online: true,
-    color: 'game-purple'
-  },
-  {
-    id: 2,
-    name: 'Игровая команда',
-    avatar: '🎮',
-    lastMessage: 'Собираемся в 20:00',
-    time: '13:45',
-    unread: 7,
-    online: true,
-    color: 'game-pink'
-  },
-  {
-    id: 3,
-    name: 'Дмитрий',
-    avatar: '👨‍💻',
-    lastMessage: 'Отправил файлы',
-    time: '11:20',
-    unread: 0,
-    online: false,
-    color: 'game-blue'
-  },
-  {
-    id: 4,
-    name: 'Мария',
-    avatar: '👩‍🎨',
-    lastMessage: 'Супер! Давай встретимся',
-    time: 'Вчера',
-    unread: 0,
-    online: true,
-    color: 'game-orange'
-  }
-];
+const MESSAGES_API = 'https://functions.poehali.dev/23e83fa7-e105-415f-8038-de90869ac1e4';
+const INIT_CHATS_API = 'https://functions.poehali.dev/33a870b2-5b98-47dc-8ae9-7d6a4bd31de1';
+const USER_ID = 1;
+
+const colorMap: { [key: string]: string } = {
+  '👩‍💼': 'game-purple',
+  '🎮': 'game-pink',
+  '👨‍💻': 'game-blue',
+  '👩‍🎨': 'game-orange'
+};
 
 const mockCommunities: Community[] = [
   {
@@ -109,6 +77,48 @@ export default function Index() {
   const [activeTab, setActiveTab] = useState<'chats' | 'communities'>('chats');
   const [selectedChat, setSelectedChat] = useState<number | null>(null);
   const [openedChat, setOpenedChat] = useState<Chat | null>(null);
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    initializeChats();
+  }, []);
+
+  const initializeChats = async () => {
+    try {
+      await fetch(INIT_CHATS_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: USER_ID })
+      });
+      await loadChats();
+    } catch (error) {
+      console.error('Error initializing chats:', error);
+      setLoading(false);
+    }
+  };
+
+  const loadChats = async () => {
+    try {
+      const response = await fetch(`${MESSAGES_API}?user_id=${USER_ID}`);
+      const data = await response.json();
+      const loadedChats: Chat[] = data.chats.map((chat: any) => ({
+        id: chat.id,
+        name: chat.name,
+        avatar: chat.avatar,
+        lastMessage: chat.lastMessage,
+        time: chat.time,
+        unread: chat.unread,
+        online: Math.random() > 0.5,
+        color: colorMap[chat.avatar] || 'game-purple'
+      }));
+      setChats(loadedChats);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading chats:', error);
+      setLoading(false);
+    }
+  };
 
   const handleVibrate = () => {
     if ('vibrate' in navigator) {
@@ -124,7 +134,7 @@ export default function Index() {
   const handleChatClick = (id: number) => {
     handleVibrate();
     setSelectedChat(id);
-    const chat = mockChats.find(c => c.id === id);
+    const chat = chats.find(c => c.id === id);
     if (chat) {
       setOpenedChat(chat);
     }
@@ -133,6 +143,7 @@ export default function Index() {
   const handleBackFromChat = () => {
     setOpenedChat(null);
     setSelectedChat(null);
+    loadChats();
   };
 
   if (openedChat) {
@@ -213,7 +224,12 @@ export default function Index() {
         <ScrollArea className="flex-1">
           {activeTab === 'chats' ? (
             <div className="p-4 space-y-2">
-              {mockChats.map((chat, index) => (
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground">Загрузка чатов...</div>
+              ) : chats.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">Нет чатов</div>
+              ) : (
+                chats.map((chat, index) => (
                 <Card
                   key={chat.id}
                   onClick={() => handleChatClick(chat.id)}
@@ -255,7 +271,8 @@ export default function Index() {
                     </div>
                   </div>
                 </Card>
-              ))}
+              )))
+            )}
             </div>
           ) : (
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">

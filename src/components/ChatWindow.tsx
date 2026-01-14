@@ -3,7 +3,8 @@ import Icon from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar } from '@/components/ui/avatar';
+const MESSAGES_API = 'https://functions.poehali.dev/23e83fa7-e105-415f-8038-de90869ac1e4';
+const USER_ID = 1;
 
 interface Message {
   id: number;
@@ -22,40 +23,23 @@ interface ChatWindowProps {
 }
 
 export default function ChatWindow({ chatId, chatName, chatAvatar, onBack, onVibrate }: ChatWindowProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      text: 'Привет! Как дела?',
-      sender: 'other',
-      time: '14:20',
-      status: 'read'
-    },
-    {
-      id: 2,
-      text: 'Отлично! А у тебя?',
-      sender: 'me',
-      time: '14:21',
-      status: 'read'
-    },
-    {
-      id: 3,
-      text: 'Тоже хорошо! Играешь сегодня?',
-      sender: 'other',
-      time: '14:22',
-      status: 'read'
-    },
-    {
-      id: 4,
-      text: 'Да, в 20:00 буду онлайн 🎮',
-      sender: 'me',
-      time: '14:23',
-      status: 'delivered'
-    }
-  ]);
-
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [loading, setLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    loadMessages();
+    pollingInterval.current = setInterval(loadMessages, 3000);
+    
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+      }
+    };
+  }, [chatId]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -63,35 +47,50 @@ export default function ChatWindow({ chatId, chatName, chatAvatar, onBack, onVib
     }
   }, [messages]);
 
-  const handleSend = () => {
+  const loadMessages = async () => {
+    try {
+      const response = await fetch(`${MESSAGES_API}?chat_id=${chatId}&user_id=${USER_ID}`);
+      const data = await response.json();
+      const loadedMessages: Message[] = data.messages.map((msg: any) => ({
+        id: msg.id,
+        text: msg.text,
+        sender: msg.is_mine ? 'me' : 'other',
+        time: msg.time,
+        status: 'read'
+      }));
+      setMessages(loadedMessages);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      setLoading(false);
+    }
+  };
+
+  const handleSend = async () => {
     if (newMessage.trim()) {
       onVibrate();
-      const now = new Date();
-      const newMsg: Message = {
-        id: messages.length + 1,
-        text: newMessage,
-        sender: 'me',
-        time: `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`,
-        status: 'sent'
-      };
-      setMessages([...messages, newMsg]);
+      const messageText = newMessage;
       setNewMessage('');
 
-      setTimeout(() => {
-        setIsTyping(true);
-      }, 1000);
-
-      setTimeout(() => {
-        setIsTyping(false);
-        const response: Message = {
-          id: messages.length + 2,
-          text: 'Круто! До встречи! 👍',
-          sender: 'other',
-          time: `${now.getHours()}:${(now.getMinutes() + 1).toString().padStart(2, '0')}`,
-          status: 'read'
-        };
-        setMessages(prev => [...prev, response]);
-      }, 2500);
+      try {
+        const response = await fetch(MESSAGES_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            sender_id: USER_ID,
+            text: messageText
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          await loadMessages();
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+      }
     }
   };
 
@@ -151,7 +150,12 @@ export default function ChatWindow({ chatId, chatName, chatAvatar, onBack, onVib
       <div className="flex-1 overflow-hidden relative">
         <ScrollArea className="h-full">
           <div ref={scrollRef} className="p-4 space-y-3">
-            {messages.map((message, index) => (
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Загрузка сообщений...</div>
+            ) : messages.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">Нет сообщений. Начните общение!</div>
+            ) : (
+              messages.map((message, index) => (
               <div
                 key={message.id}
                 className={`flex ${message.sender === 'me' ? 'justify-end' : 'justify-start'} animate-slide-up`}
@@ -179,7 +183,8 @@ export default function ChatWindow({ chatId, chatName, chatAvatar, onBack, onVib
                   </div>
                 </div>
               </div>
-            ))}
+            )))
+            )}
 
             {isTyping && (
               <div className="flex justify-start animate-slide-up">
