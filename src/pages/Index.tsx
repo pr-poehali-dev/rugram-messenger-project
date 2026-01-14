@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import ChatWindow from '@/components/ChatWindow';
 
 interface Chat {
   id: number;
@@ -107,6 +108,7 @@ const mockCommunities: Community[] = [
 export default function Index() {
   const [activeTab, setActiveTab] = useState<'chats' | 'communities'>('chats');
   const [selectedChat, setSelectedChat] = useState<number | null>(null);
+  const [openedChat, setOpenedChat] = useState<Chat | null>(null);
 
   const handleVibrate = () => {
     if ('vibrate' in navigator) {
@@ -122,7 +124,30 @@ export default function Index() {
   const handleChatClick = (id: number) => {
     handleVibrate();
     setSelectedChat(id);
+    const chat = mockChats.find(c => c.id === id);
+    if (chat) {
+      setOpenedChat(chat);
+    }
   };
+
+  const handleBackFromChat = () => {
+    setOpenedChat(null);
+    setSelectedChat(null);
+  };
+
+  if (openedChat) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <ChatWindow
+          chatId={openedChat.id}
+          chatName={openedChat.name}
+          chatAvatar={openedChat.avatar}
+          onBack={handleBackFromChat}
+          onVibrate={handleVibrate}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
